@@ -226,14 +226,3 @@ class ThermalCam(QWidget):
     def closeEvent(self, event):
         self.thermal_camera.stop()
         event.accept()
-
-# **Main Execution**
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    main_window = QWidget()
-    layout = QVBoxLayout(main_window)
-    thermal_cam = ThermalCam(main_window, main_window)
-    layout.addWidget(thermal_cam)
-    main_window.setLayout(layout)
-    main_window.show()
-    sys.exit(app.exec_())
