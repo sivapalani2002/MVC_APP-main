@@ -34,7 +34,7 @@ class SerialModel:
             print(f"Received: {response}")
 
         except Exception as e:
-            print(f"Error: {e}")
+         print(f"Error: {e}")
 
     def close(self):
         if self.ser:
