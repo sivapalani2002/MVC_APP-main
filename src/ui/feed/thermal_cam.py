@@ -5,11 +5,9 @@ import logging
 import threading
 import numpy as np
 import cv2 as cv
-from flask import Flask, Response
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QApplication
 from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtCore import QThread, pyqtSignal, QUrl
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtCore import QThread, pyqtSignal
 from senxor.mi48 import MI48, format_header, format_framestats  # Connects and communicates with the MI48 thermal camera
 from senxor.utils import data_to_frame, remap, cv_filter, RollingAverageFilter, connect_senxor
 
@@ -37,7 +35,7 @@ def replace_dead_pixels(frame, min_val=0, max_val=200):
 class ThermalCamera(QThread):
     frame_ready = pyqtSignal(np.ndarray)
 
-    def __init__(self, roi=(1, 10, 61, 71), com_port=None):
+    def __init__(self, roi=(0, 0, 80, 80), com_port=None):
         """
         Initializes the thermal camera with a given ROI and optional COM port.
         Runs in a separate thread.
@@ -94,7 +92,7 @@ class ThermalCamera(QThread):
         frame = replace_dead_pixels(frame)
 
         # Vertical flip and rotate
-        frame = cv.flip(frame, 1)
+        #frame = cv.flip(frame, 1)
         frame = cv.rotate(frame, cv.ROTATE_90_CLOCKWISE)
 
         # Apply filters
@@ -116,7 +114,7 @@ class ThermalCamera(QThread):
 
         # Calculate section temperatures
         temps = self.calculate_temperatures(frame, x1, y1, x2, y2)
-        print(temps)
+        logger.debug(f"Section temperatures: {temps}")               #prints the section temperature
 
         # Overlay text on the image
         self.overlay_text(roi_frame, temps)
@@ -183,29 +181,6 @@ class ThermalCamera(QThread):
             x, y = positions[section]
             cv.putText(frame, f"{temp:.2f}C", (x, y), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1)
 
-    def start_stream(self):
-        """Starts an MJPEG stream."""
-        app = Flask(__name__) # Creates a Flask web server to stream the processed video
-
-        @app.route('/video_feed') #make sure to add this after the ip ad
-        def video_feed():
-            return Response(self.generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-        threading.Thread(target=lambda: app.run(host="0.0.0.0", port=5000, threaded=True, use_reloader=False), daemon=True).start()
-
-    def generate_frames(self):
-        """Generates frames for the MJPEG stream."""
-        while self.running:
-            with self.lock:
-                if self.latest_frame is None:
-                    continue
-                
-                _, buffer = cv.imencode('.jpg', self.latest_frame)  #Encodes the processed image as a JPEG for fast streaming
-                frame_bytes = buffer.tobytes()
-
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
     def stop(self):
         """Stops the camera."""
         self.running = False
@@ -219,7 +194,6 @@ class ThermalCam(QWidget):
         self.thermal_camera = ThermalCamera()
         self.thermal_camera.frame_ready.connect(self.update_frame)
         self.thermal_camera.start()
-        self.thermal_camera.start_stream()
         self.init_ui()
 
     def init_ui(self):
@@ -230,10 +204,6 @@ class ThermalCam(QWidget):
         self.video_label = QLabel()
         self.layout.addWidget(self.video_label)
 
-        self.web_view = QWebEngineView()
-        self.web_view.setUrl(QUrl("http://localhost:5000/video_feed"))
-        self.layout.addWidget(self.web_view)
-
         self.back_button = QPushButton("Back")
         self.back_button.clicked.connect(self.go_back)
         self.layout.addWidget(self.back_button)
@@ -241,8 +211,13 @@ class ThermalCam(QWidget):
         self.setLayout(self.layout)
 
     def update_frame(self, frame):
-        image = QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format_RGB32) #QImage.Format_RGB32  QImage.Format_ARGB32 QImage.Format_Grayscale8
-        self.video_label.setPixmap(QPixmap.fromImage(image))
+        logger.debug("Updating frame on UI")
+        if frame is not None:
+            logger.debug(f"Frame shape: {frame.shape}, dtype: {frame.dtype}")
+            image = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format_BGR888)
+            self.video_label.setPixmap(QPixmap.fromImage(image))
+        else:
+            logger.error("Received empty frame")
 
     def go_back(self):
         self.thermal_camera.stop()

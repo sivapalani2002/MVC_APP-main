@@ -7,6 +7,11 @@ from ui.feed.thermal_cam import ThermalCam
 from ui.feed.rgb_cam import RGBCam
 from ui.heater_controll.heater_control import HeaterControl
 from ui.feed.thermal_cam import ThermalCamera
+import logging
+
+# Enable logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 class HomeScreen(QWidget):
     def __init__(self, parent):
@@ -17,7 +22,7 @@ class HomeScreen(QWidget):
     def init_ui(self):
         self.setWindowTitle("SLS Camera Feed")
         self.setGeometry(100, 100, 800, 600)  # Set the window size to 800x600 (x,y width x height)
-        self.setStyleSheet("background-color: black;")  # Set the background color to red
+        self.setStyleSheet("background-color: black;")  # Set the background color to black
         
         self.layout = QHBoxLayout()
         button_layout = QVBoxLayout()
@@ -57,31 +62,17 @@ class HomeScreen(QWidget):
             self.thermal_cam_widget.deleteLater()
 
         # Create and add the thermal feed widget
-        self.thermal_cam_widget = QWidget()
-        thermal_layout = QVBoxLayout()
-
-        self.label = QLabel("Thermal Cam Feed")
-        thermal_layout.addWidget(self.label)
-
-        self.video_label = QLabel()
-        thermal_layout.addWidget(self.video_label)
-
-        self.web_view = QWebEngineView()
-        self.web_view.setUrl(QUrl("http://localhost:5000/video_feed"))
-        thermal_layout.addWidget(self.web_view)
-
-        self.thermal_cam_widget.setLayout(thermal_layout)
+        self.thermal_cam_widget = ThermalCam(self, self.main_window)
         self.layout.addWidget(self.thermal_cam_widget)
 
-        # Start the thermal camera
-        self.thermal_camera = ThermalCamera()
-        self.thermal_camera.frame_ready.connect(self.update_frame)
-        self.thermal_camera.start()
-        self.thermal_camera.start_stream()
-
     def update_frame(self, frame):
-        image = QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format_RGB32)
-        self.video_label.setPixmap(QPixmap.fromImage(image))
+        logger.debug("Updating frame on UI")
+        if frame is not None:
+            logger.debug(f"Frame shape: {frame.shape}, dtype: {frame.dtype}")
+            image = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format_BGR888)
+            self.video_label.setPixmap(QPixmap.fromImage(image))
+        else:
+            logger.error("Received empty frame")
 
     def show_rgb_cam(self):
         print("RGB feed button clicked")
